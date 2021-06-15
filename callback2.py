@@ -10,6 +10,7 @@ import tensorflow_datasets as tfds
 
 from tensorflow import keras
 from tensorflow.keras import layers
+from utils import plot_to_image, image_grid
 
 (ds_train, ds_test), ds_info = tfds.load(
     "cifar10",
@@ -35,6 +36,7 @@ def augment(image, label):
 
     image = tf.image.random_brightness(image, max_delta=0.1)
     image = tf.image.random_flip_left_right(image)
+    image = tf.clip_by_value(image, clip_value_min=0, clip_value_max=1)
 
     return image, label
 
@@ -88,41 +90,25 @@ num_epochs = 1
 loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 optimizer = keras.optimizers.Adam(lr=0.001)
 acc_metric = keras.metrics.SparseCategoricalAccuracy()
-train_writer = tf.summary.create_file_writer("logs/train/")
-test_writer = tf.summary.create_file_writer("logs/test/")
-train_step = test_step = 0
+writer = tf.summary.create_file_writer("logs/train/")
+step = 0
 
 
-for lr in [1e-1, 1e-2, 1e-3, 1e-4, 1e-5]:
-    train_step = test_step = 0
-    train_writer = tf.summary.create_file_writer("logs/train/" + str(lr))
-    test_writer = tf.summary.create_file_writer("logs/test/" + str(lr))
-    model = get_model()
-    optimizer = keras.optimizers.Adam(lr=lr)
+for epoch in range(num_epochs):
+    for batch_idx, (x, y) in enumerate(ds_train):
+        figure = image_grid(x, y, class_names)
 
-    for epoch in range(num_epochs):
-        # Iterate through training set
-        for batch_idx, (x, y) in enumerate(ds_train):
-            with tf.GradientTape() as tape:
-                y_pred = model(x, training=True)
-                loss = loss_fn(y, y_pred)
-
-            gradients = tape.gradient(loss, model.trainable_weights)
-            optimizer.apply_gradients(zip(gradients, model.trainable_weights))
-            acc_metric.update_state(y, y_pred)
-
-            with train_writer.as_default():
-                tf.summary.scalar("Loss", loss, step=train_step)
-                tf.summary.scalar(
-                    "Accuracy", acc_metric.result(), step=train_step,
-                )
-                train_step += 1
+        with writer.as_default():
+            tf.summary.image(
+                'Visualize Images', plot_to_image(figure), step=step
+            )
+            step += 1
 
         # Reset accuracy in between epochs (and for testing and test)
-        acc_metric.reset_states()
+
 
         # Iterate through test set
-        for batch_idx, (x, y) in enumerate(ds_test):
+        '''for batch_idx, (x, y) in enumerate(ds_test):
             y_pred = model(x, training=False)
             loss = loss_fn(y, y_pred)
             acc_metric.update_state(y, y_pred)
@@ -137,4 +123,4 @@ for lr in [1e-1, 1e-2, 1e-3, 1e-4, 1e-5]:
         acc_metric.reset_states()
 
     # Reset accuracy in between epochs (and for testing and test)
-    acc_metric.reset_states()
+    acc_metric.reset_states()'''
